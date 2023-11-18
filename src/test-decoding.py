@@ -46,7 +46,7 @@ def get_sampling_index(T, prev_ps, prev_t, ps_rad, sps, buffer_len):
 
     # FIXME: intenta eliminar tantos np.append como puedas, seguro que ganas tiempo por no tener que allocate copias de arrays
     if prev_t.size != 0: T = np.append(prev_t, T) # Añadimos a T el anterior T si lo hay (con índice negativo)
-    T = np.append(prev_t, T) if prev_t.size != 0 else T
+    #T = np.append(prev_t, T) if prev_t.size != 0 else T
     # Añadimos a new_ps el anterior PS si lo hay (con índice negativo)
     new_ps = prev_ps if prev_ps.size != 0 else np.array([],dtype=int)
     if T.size == 0:
