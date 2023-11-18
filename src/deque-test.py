@@ -4,6 +4,10 @@ import sys, time, math
 from collections import deque
 np.set_printoptions(threshold=sys.maxsize)
 
+
+from pycallgraph2 import PyCallGraph
+from pycallgraph2.output import GraphvizOutput
+
 def convolve_rt(x1, x2, trail):
     # x1 & x2: datos a convolucionar, suponemos que len(x1)>len(x2)
     # trail: últimos len(x2)-1 datos de la convolución anterior, que se suman a los len(x2)-1 primeros de la nueva para simular 
@@ -20,7 +24,11 @@ def find_triggers(x, trail, h_th, l_th, h_delta, l_delta):
     dist,_ = convolve_rt(zerox, [1, -1], trail) # Aquí trail es la distancia del último zero crossing al final del buffer
                                                 # por lo que podemos ignorar el trail que devuelve la función
 
+#    Hacerlo con una list comprehension es bastante (~15ms) más lento que con el np array
+#    triggers = [i for i,d in enumerate(dist) if d<h_delta and d>l_delta]
+
     triggers = np.nonzero((dist<h_delta) & (dist>l_delta))[0]   # Los índices de dist en los que se cumple la condición de trigger
+
     return (zerox[triggers], [len(x) - zerox[-1]])  # Devolvemos las posiciones de los triggers y la posición del último zero 
                                                     # crossing al final del array
 def get_sampling_index(T, trail, ps_flag, ps_rad, sps, buffer_len):
@@ -39,41 +47,20 @@ def get_sampling_index(T, trail, ps_flag, ps_rad, sps, buffer_len):
             T.appendleft(trail)
 
 
-#    ### Metemos todo y luego ordenamos
-#    # Calculamos cuantos PS caben entre un T y el siguiente y los metemos cada sps
-#    if len(T) > 1:
-#        for i in range(len(T) - 1):
-#            #n_ps = np.abs(math.floor((T[i+1] - T[i]) / sps)) - 1 # FIXME: nos podemos quitar el abs?
-#            n_ps = int(math.floor((T[i+1] - T[i]) / sps) - 1)
-#            T.extend([T[i] + sps*n for n in range(1, n_ps+1)])
-#    # El último (o el primero si solo hay uno) se hace con respecto al final del array, ya que no hay otro después de el, ya que
-#    # es el último
-#    n_ps = int(math.floor((buffer_len - T[-1]) / sps) - 1)
-#    T.extend([T[-1] + sps*n for n in range(1, n_ps+1)])
-#    T = sorted(T)
-
-    #### Metemos todo donde debe estar, sin ordenar al final
     # Calculamos cuantos PS caben entre un T y el siguiente y los metemos cada sps
     if len(T) > 1:
-        for i in range(len(T) - 1):
-            #n_ps = np.abs(np.floor((T[i+1] - T[i]) / sps)) - 1 # FIXME: nos podemos quitar el abs?
+        for i in range(len(T) - 1): 
             n_ps = math.floor((T[i+1] - T[i]) / sps) - 1
-            for j in range(i+1,i+n_ps+1): T.insert(j, T[i]+sps*(j-i))
+            for j in range(i+1,i+n_ps+1): T.insert(j, T[i]+sps*(j-i))   # Los mete directamnte en el índice correcto, es más
+                                                                        # rápido que meterlos al final y ordenar
     # El último (o el primero si solo hay uno) se hace con respecto al final del array, ya que no hay otro después de el, ya que
     # es el último
     n_ps = math.floor((buffer_len - T[-1]) / sps)
     T.extend([T[-1] + sps*n for n in range(1, n_ps+1)])
 
     new_trail = T.pop() - buffer_len
-    #print("new_trail: " + str(new_trail))
     new_ps_flag = True if n_ps > 0 else False
     return (T, new_trail, new_ps_flag)    
-
-# Devuelve los PS que cumplen con ps_rad
-def invalidate_PS(T,PS,ps_rad):
-    PS_leftovers = [ps for ps in PS for t in T if abs(ps-t)<ps_rad] # los que sobran
-    return np.setdiff1d(PS, PS_leftovers)                             # Me quedo con los que cumplen
-    # Este setdiff1d es delicado en tiempo
 
 def decisor(soft_decisions, trail_mf, trail_decision, trail_th):
     decisions = [0 for i in range(len(soft_decisions))]
@@ -93,8 +80,7 @@ def decisor(soft_decisions, trail_mf, trail_decision, trail_th):
 
         
 
-if __name__ == '__main__':
-
+def test():
     # FIXME: Meter los parámetros en un dict
     # PARÁMETROS
     path_envelope = "../resources/envelope.grc"
@@ -102,7 +88,7 @@ if __name__ == '__main__':
     sps = 1200                  # samples per symbol. TIENE QUE SER PAR
     buffer_len = 5*sps          # Tamaño del buffer de recepción 
     ra_len = 200                # Longitud del running averager aplicado a a la salida del matched filter
-    zerox_th_h = 0.08            # Thresholds para la detección de los pasos por cero
+    zerox_th_h = 0.10            # Thresholds para la detección de los pasos por cero
     zerox_th_l = -zerox_th_h
     sps_th_h = 1700
     sps_th_l = 1100
@@ -151,11 +137,16 @@ if __name__ == '__main__':
     prev_mf = np.zeros(int(sps))
 
     decisions = []
-    tic = time.perf_counter()
+    
+
+    
+
+#    tic = time.perf_counter()
     for i,data in enumerate(envelope):
         # Pasamos por el matched filter
         (mf, trail_mf) = convolve_rt(data, h_mf, trail_mf)
-    
+        
+   
         # Pasamos por el running averager
         (mf, trail_ra) = convolve_rt(mf, h_ra, trail_ra)
 
@@ -174,46 +165,54 @@ if __name__ == '__main__':
 
 
         soft_decisions = deque(mf[[sampling_index[i] for i in range(1,len(sampling_index))]])
-        if sampling_index[0] < 0: soft_decisions.appendleft(prev_mf[sampling_index[0]])
+        if len(sampling_index) !=  0: 
+            if sampling_index[0] < 0: 
+                soft_decisions.appendleft(prev_mf[sampling_index[0]])
         
         if len(soft_decisions) != 0: 
             (decisions, trail_dec_mf, trail_decision, trail_th) = decisor(soft_decisions, trail_dec_mf, trail_decision, trail_th)
 
-
         prev_mf = mf[-sps:]
-        # Guardamos el resultado para visualizarlos
-        matched_filter_result[i,:] = mf
-        diff_result[i,:] = diff
-        trigger_result = np.append(trigger_result, i*buffer_len+np.array(sampling_index))
-        decisions_result = np.append(decisions_result, decisions)
+            # Guardamos el resultado para visualizarlos
+#        matched_filter_result[i,:] = mf
+#        diff_result[i,:] = diff
+#        trigger_result = np.append(trigger_result, i*buffer_len+np.array(sampling_index))
+#        decisions_result = np.append(decisions_result, decisions)
 
+#    toc = time.perf_counter()
+#    print("Elapsed time:", toc-tic)
 
-    toc = time.perf_counter()
-    print("Elapsed time:", toc-tic)
-    decisions_result = np.append([0], decisions_result)
+#    trigger_result = trigger_result.astype(int)
+#    decisions_result = np.append([0], decisions_result)
+#
+#    matched_filter_result = np.reshape(matched_filter_result, np.size(matched_filter_result))
+#    diff_result = np.reshape(diff_result, np.size(diff_result))
+#    triger_result = trigger_result[trigger_result != 0]
+#
+#    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4,1,sharex=True)
+#
+#    x = np.r_[0:len(matched_filter_result)]
+#
+#    ax1.plot(x, matched_filter_result, color='blue')
+#    ax1.stem(x[trigger_result],matched_filter_result[trigger_result])
+#    ax1.set_title("Output del matched filter y soft decisions")
+#
+#    ax2.plot(x, diff_result, color='red')
+#    ax2.stem(x[trigger_result],diff_result[trigger_result]) 
+#    ax2.set_title("Primera diferencia")
+#
+#    #print(len(x[trigger_result]))
+#    #print(len(decisions_result))
+#        
+#    ax3.stem(x[trigger_result], decisions_result)
+#    ax3.set_title("Output bits");
+#    ax4.plot(x,np.ravel(envelope))
+#    ax4.set_title("Envolvente de la señal")
+#
+#    plt.show()
 
-    matched_filter_result = np.reshape(matched_filter_result, np.size(matched_filter_result))
-    diff_result = np.reshape(diff_result, np.size(diff_result))
-    triger_result = trigger_result[trigger_result != 0]
+if __name__ == '__main__':
 
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4,1,sharex=True)
+    with PyCallGraph(output=GraphvizOutput()):
+        test()
 
-    x = np.r_[0:len(matched_filter_result)]
-
-    ax1.plot(x, matched_filter_result, color='blue')
-    ax1.stem(x[trigger_result],matched_filter_result[trigger_result])
-    ax1.set_title("Output del matched filter y soft decisions")
-
-    ax2.plot(x, diff_result, color='red')
-    ax2.stem(x[trigger_result],diff_result[trigger_result]) 
-    ax2.set_title("Primera diferencia")
-
-    #print(len(x[trigger_result]))
-    #print(len(decisions_result))
-        
-    ax3.stem(x[trigger_result], decisions_result)
-    ax3.set_title("Output bits");
-    ax4.plot(x,np.ravel(envelope))
-    ax4.set_title("Envolvente de la señal")
-
-    plt.show()
