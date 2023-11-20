@@ -8,6 +8,7 @@ np.set_printoptions(threshold=sys.maxsize)
 from pycallgraph2 import PyCallGraph
 from pycallgraph2.output import GraphvizOutput
 
+
 def convolve_rt(x1, x2, trail):
     # x1 & x2: datos a convolucionar, suponemos que len(x1)>len(x2)
     # trail: últimos len(x2)-1 datos de la convolución anterior, que se suman a los len(x2)-1 primeros de la nueva para simular 
@@ -18,18 +19,23 @@ def convolve_rt(x1, x2, trail):
 
 def find_triggers(x, trail, h_th, l_th, h_delta, l_delta):
     # Buscamos los índices de los pasos por cero
+#    zerox = [i for i,z in enumerate(x) if z<h_th and z>l_th]
     zerox = np.nonzero((x < h_th) & (x > l_th))[0]
 
     # Calculamos las distancias entre los pasos por cero
     dist,_ = convolve_rt(zerox, [1, -1], trail) # Aquí trail es la distancia del último zero crossing al final del buffer
-                                                # por lo que podemos ignorar el trail que devuelve la función
-
 #    Hacerlo con una list comprehension es bastante (~15ms) más lento que con el np array
-#    triggers = [i for i,d in enumerate(dist) if d<h_delta and d>l_delta]
 
+#    tic = time.perf_counter()
+#    toc = time.perf_counter()
+#    print("Elapsed time:", toc-tic)
+
+#    triggers = [i for i,d in enumerate(dist) if d<h_delta and d>l_delta]
     triggers = np.nonzero((dist<h_delta) & (dist>l_delta))[0]   # Los índices de dist en los que se cumple la condición de trigger
 
-    return (zerox[triggers], [len(x) - zerox[-1]])  # Devolvemos las posiciones de los triggers y la posición del último zero 
+    return (zerox[triggers], [len(x)-zerox[-1]])
+#    return ([zerox[i] for i in triggers], [len(x) - zerox[-1]])
+# Devolvemos las posiciones de los triggers y la posición del último zero 
                                                     # crossing al final del array
 def get_sampling_index(T, trail, ps_flag, ps_rad, sps, buffer_len):
 
@@ -83,7 +89,7 @@ def decisor(soft_decisions, trail_mf, trail_decision, trail_th):
 def test():
     # FIXME: Meter los parámetros en un dict
     # PARÁMETROS
-    path_envelope = "../resources/envelope.grc"
+    path_envelope = "../resources/bad.grc"
     fs = 20e3                   # Frecuencia de muestreo de los samples recibidos 
     sps = 1200                  # samples per symbol. TIENE QUE SER PAR
     buffer_len = 5*sps          # Tamaño del buffer de recepción 
@@ -161,9 +167,6 @@ def test():
         # Propagamos los T y el prev_ps
         (sampling_index, trail_samp, ps_flag) = get_sampling_index(T, trail_samp, ps_flag, ps_rad, sps, buffer_len)
 
-        ############# No funciona el decisor
-
-
         soft_decisions = deque(mf[[sampling_index[i] for i in range(1,len(sampling_index))]])
         if len(sampling_index) !=  0: 
             if sampling_index[0] < 0: 
@@ -174,45 +177,45 @@ def test():
 
         prev_mf = mf[-sps:]
             # Guardamos el resultado para visualizarlos
-#        matched_filter_result[i,:] = mf
-#        diff_result[i,:] = diff
-#        trigger_result = np.append(trigger_result, i*buffer_len+np.array(sampling_index))
-#        decisions_result = np.append(decisions_result, decisions)
+        matched_filter_result[i,:] = mf
+        diff_result[i,:] = diff
+        trigger_result = np.append(trigger_result, i*buffer_len+np.array(sampling_index))
+        decisions_result = np.append(decisions_result, decisions)
 
-#    toc = time.perf_counter()
-#    print("Elapsed time:", toc-tic)
+    trigger_result = trigger_result.astype(int)
 
-#    trigger_result = trigger_result.astype(int)
-#    decisions_result = np.append([0], decisions_result)
-#
-#    matched_filter_result = np.reshape(matched_filter_result, np.size(matched_filter_result))
-#    diff_result = np.reshape(diff_result, np.size(diff_result))
-#    triger_result = trigger_result[trigger_result != 0]
-#
-#    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4,1,sharex=True)
-#
-#    x = np.r_[0:len(matched_filter_result)]
-#
-#    ax1.plot(x, matched_filter_result, color='blue')
-#    ax1.stem(x[trigger_result],matched_filter_result[trigger_result])
-#    ax1.set_title("Output del matched filter y soft decisions")
-#
-#    ax2.plot(x, diff_result, color='red')
-#    ax2.stem(x[trigger_result],diff_result[trigger_result]) 
-#    ax2.set_title("Primera diferencia")
-#
-#    #print(len(x[trigger_result]))
-#    #print(len(decisions_result))
-#        
-#    ax3.stem(x[trigger_result], decisions_result)
-#    ax3.set_title("Output bits");
-#    ax4.plot(x,np.ravel(envelope))
-#    ax4.set_title("Envolvente de la señal")
-#
-#    plt.show()
+    matched_filter_result = np.reshape(matched_filter_result, np.size(matched_filter_result))
+    diff_result = np.reshape(diff_result, np.size(diff_result))
+    triger_result = trigger_result[trigger_result != 0]
+
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4,1,sharex=True)
+
+    x = np.r_[0:len(matched_filter_result)]
+
+    ax1.plot(x, matched_filter_result, color='blue')
+    ax1.stem(x[trigger_result],matched_filter_result[trigger_result])
+    ax1.set_title("Output del matched filter y soft decisions")
+
+    ax2.plot(x, diff_result, color='red')
+    ax2.stem(x[trigger_result],diff_result[trigger_result]) 
+    ax2.set_title("Primera diferencia")
+
+    #print(len(x[trigger_result]))
+    #print(len(decisions_result))
+        
+    #decisions_result = np.append(decisions_result, 14*[0])
+    decisions_result = np.append([1], decisions_result)
+    print(len(x[trigger_result]))
+    print(len(decisions_result))
+    ax3.stem(x[trigger_result], decisions_result)
+    ax3.set_title("Output bits");
+    ax4.plot(x,np.ravel(envelope))
+    ax4.set_title("Envolvente de la señal")
+
+    plt.show()
 
 if __name__ == '__main__':
 
-    with PyCallGraph(output=GraphvizOutput()):
-        test()
+#    with PyCallGraph(output=GraphvizOutput()):
+    test()
 

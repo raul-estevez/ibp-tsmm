@@ -111,7 +111,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: ''
-    file: /home/abby/uvsl/curso_gnuradio/corr.grc
+    file: /home/abby/uni/tsmm/ibp_tsmm/resources/good.grc
     type: float
     unbuffered: 'False'
     vlen: '1'
@@ -121,7 +121,7 @@ blocks:
     bus_structure: null
     coordinate: [672, 648.0]
     rotation: 0
-    state: enabled
+    state: disabled
 - name: blocks_file_sink_0_0_0
   id: blocks_file_sink
   parameters:
@@ -129,7 +129,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: ''
-    file: /home/abby/uvsl/curso_gnuradio/envelope.grc
+    file: /home/abby/uni/tsmm/ibp_tsmm/resources/bad.grc
     type: float
     unbuffered: 'False'
     vlen: '1'
@@ -166,7 +166,7 @@ blocks:
     affinity: ''
     alias: ''
     comment: ''
-    file: ../resources/cs3b_noise.wav
+    file: /home/abby/uni/tsmm/ibp_tsmm/resources/oh2b.wav
     maxoutbuf: '0'
     minoutbuf: '0'
     nchan: '1'
