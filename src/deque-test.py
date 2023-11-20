@@ -181,6 +181,7 @@ def test():
         diff_result[i,:] = diff
         trigger_result = np.append(trigger_result, i*buffer_len+np.array(sampling_index))
         decisions_result = np.append(decisions_result, decisions)
+        print(decisions)
 
     trigger_result = trigger_result.astype(int)
 

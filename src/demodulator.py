@@ -1,26 +1,28 @@
 import numpy as np
 import math
 from collections import deque
-np.set_printoptions(threshold=sys.maxsize)
+from dataclasses import dataclass
 
 # PARÁMETROS
 
-params = {
-    fs : 20e3                   # Frecuencia de muestreo de los samples recibidos 
-    sps : 1200                  # samples per symbol. TIENE QUE SER PAR
-    buffer_len : 5*sps          # Tamaño del buffer de recepción 
-    ra_len : 200                # Longitud del running averager aplicado a a la salida del matched filter
-    zerox_th_h : 0.10            # Thresholds para la detección de los pasos por cero
-    zerox_th_l : -zerox_th_h
-    sps_th_h : 1700
-    sps_th_l : 1100
-    ps_rad : 0.9*sps
-}
+@dataclass
+class params_:
+    fs = 20e3                   # Frecuencia de muestreo de los samples recibidos 
+    sps = 1200                  # samples per symbol. TIENE QUE SER PAR
+    buffer_len = 5*1200          # Tamaño del buffer de recepción 
+    ra_len = 200               # Longitud del running averager aplicado a a la salida del matched filter
+    zerox_th_h = 0.10            # Thresholds para la detección de los pasos por cero
+    zerox_th_l = -0.10
+    sps_th_h = 1700
+    sps_th_l = 1100
+    ps_rad = 0.9*1200
+
+params = params_()
 
 # Respuesta impulsional filtros
-h_mf = 1/sps*np.ones(sps)
+h_mf = 1/params.sps*np.ones(params.sps)
 h_diff = [3e3,-3e3]
-h_ra = 1/ra_len*np.ones(ra_len)
+h_ra = 1/params.ra_len*np.ones(params.ra_len)
 
 def convolve_rt(x1, x2, trail):
     # x1 & x2: datos a convolucionar, suponemos que len(x1)>len(x2)
@@ -87,12 +89,12 @@ def decisor(soft_decisions, trail_mf, trail_decision, trail_th):
 
     return (decisions, soft_decisions[-1], decisions[-1], threshold)
         
-def decoder(data: numpy.ndarray, trails: dict[numpy.ndarray]) -> (tuple[int], dict[numpy.ndarray]):
+def demodulator(data: np.ndarray, trails) -> (tuple[int], dict):
     # trails:
     #   mf, ra, diff, T, samp, buffer, dec_mf, decision, th
 
      # Pasamos por el matched filter
-    (mf, trails.mf) = convolve_rt(data, params.h_mf, trails.mf)
+    (mf, trails.mf) = convolve_rt(data, h_mf, trails.mf)
 
     # Pasamos por el running averager
     (mf, trails.ra) = convolve_rt(mf, h_ra, trails.ra)
@@ -102,21 +104,25 @@ def decoder(data: numpy.ndarray, trails: dict[numpy.ndarray]) -> (tuple[int], di
 
 
     # Buscamos los triggers en diff
-    (T, trails.T) = find_triggers(diff, trails.T, zerox_th_h, zerox_th_l, sps_th_h, sps_th_l)
+    (T, trails.T) = find_triggers(diff, trails.T, params.zerox_th_h, params.zerox_th_l, params.sps_th_h,
+                                     params.sps_th_l)
     T = deque(T)
 
     # Propagamos los T y el prev_ps
-    (sampling_index, trails.samp, ps_flag) = get_sampling_index(T, trails.samp, ps_flag, ps_rad, sps, buffer_len)
+    (sampling_index, trails.samp, trails.ps_flag) = get_sampling_index(T, trails.samp, trails.ps_flag,
+                                                                             params.ps_rad, params.sps, params.buffer_len)
 
     soft_decisions = deque(mf[[sampling_index[i] for i in range(1,len(sampling_index))]])
     if len(sampling_index) !=  0: 
         if sampling_index[0] < 0: 
             soft_decisions.appendleft(trails.buffer[sampling_index[0]])
 
+    decisions = []
     if len(soft_decisions) != 0: 
-        (decisions, trail_dec_mf, trail_decision, trail_th) = decisor(soft_decisions, trails.dec_mf, trails.decision, trails.th)
+        (decisions, trails.dec_mf, trails.decision, trails.th) = decisor(soft_decisions, trails.dec_mf, trails.decision, trails.th)
+    
 
-    trails.buffer = mf[-sps:]
+    trails.buffer = mf[-params.sps:]
 
     return (decisions, trails)
 
