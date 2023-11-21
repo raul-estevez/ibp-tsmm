@@ -89,7 +89,7 @@ def decisor(soft_decisions, trail_mf, trail_decision, trail_th):
 def test():
     # FIXME: Meter los parámetros en un dict
     # PARÁMETROS
-    path_envelope = "../resources/bad.grc"
+    path_envelope = "../resources/envelope.grc"
     fs = 20e3                   # Frecuencia de muestreo de los samples recibidos 
     sps = 1200                  # samples per symbol. TIENE QUE SER PAR
     buffer_len = 5*sps          # Tamaño del buffer de recepción 
@@ -146,7 +146,6 @@ def test():
     
 
     
-
 #    tic = time.perf_counter()
     for i,data in enumerate(envelope):
         # Pasamos por el matched filter
@@ -162,6 +161,7 @@ def test():
 
         # Buscamos los triggers en diff
         (T, trail_T) = find_triggers(diff,trail_T, zerox_th_h, zerox_th_l, sps_th_h, sps_th_l)
+        print(np.array(T)+i*buffer_len)
         T = deque(T)
 
         # Propagamos los T y el prev_ps
@@ -181,7 +181,8 @@ def test():
         diff_result[i,:] = diff
         trigger_result = np.append(trigger_result, i*buffer_len+np.array(sampling_index))
         decisions_result = np.append(decisions_result, decisions)
-        print(decisions)
+
+        #print(decisions)
 
     trigger_result = trigger_result.astype(int)
 
@@ -206,8 +207,6 @@ def test():
         
     #decisions_result = np.append(decisions_result, 14*[0])
     decisions_result = np.append([1], decisions_result)
-    print(len(x[trigger_result]))
-    print(len(decisions_result))
     ax3.stem(x[trigger_result], decisions_result)
     ax3.set_title("Output bits");
     ax4.plot(x,np.ravel(envelope))
