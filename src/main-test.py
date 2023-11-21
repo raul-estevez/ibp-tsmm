@@ -125,7 +125,7 @@ for i,data in enumerate(envelope):
             trails.reset() # Reset de solo las que no comparte con be_trails
 
             #print("Fin de mensaje")
-            station, error = dc.convolve_hamming(list(bit_buffer))
+            station, error = dc.find_station(list(bit_buffer))
             if station:print(str(list(bit_buffer))); print(station + " with " + str(error) + " bits of error")
             bit_buffer.clear()
 

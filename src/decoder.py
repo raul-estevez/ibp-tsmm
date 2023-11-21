@@ -19,8 +19,9 @@ stations = {'4U1UN': [1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1
 import sys 
 
 
-def convolve_hamming(data: list) -> tuple:
-    # Lo saltamos si es muy corto i.e. < min(len(stations)) o si es muy largo 100 (arbitrario)
+def find_station(data: list) -> tuple:
+    # Lo saltamos si es muy corto i.e. < min(len(stations))/2 o si es muy largo 100 (arbitrario, pero mayor que la estación más
+    # larga)
     if len(data) < 26 or len(data) > 100 : return None, None
 
     min_dist = 10000
