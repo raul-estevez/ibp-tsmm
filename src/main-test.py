@@ -6,13 +6,14 @@ from dataclasses import dataclass
 np.set_printoptions(threshold=sys.maxsize)
 
 import demodulator as dm
+import decoder as dc
 
 
 buffer_len = dm.params.buffer_len
 sps = dm.params.sps
 ra_len = dm.params.ra_len
 
-path_envelope = "../resources/envelope.grc"
+path_envelope = "../resources/convined.grc"
 # Leer la envolvente (el input del módulo) 
 envelope = np.fromfile(path_envelope, dtype=np.float32)
 # También la separamos en una matriz de buffer_len columnas para simular la llegada paulatina de datos
@@ -124,7 +125,8 @@ for i,data in enumerate(envelope):
             trails.reset() # Reset de solo las que no comparte con be_trails
 
             #print("Fin de mensaje")
-            print(str(list(bit_buffer)))
+            station = dc.convolve_hamming(list(bit_buffer))
+            if station:print(str(list(bit_buffer))); print(station)
             bit_buffer.clear()
 
             # Aquí no llamamos otra vez al be_detecor para ver si hay trigger por que queremos que la decisión de para el mensaje

@@ -129,7 +129,7 @@ blocks:
     alias: ''
     append: 'False'
     comment: ''
-    file: /home/abby/uni/tsmm/ibp_tsmm/resources/bad.grc
+    file: /home/abby/uni/tsmm/ibp_tsmm/resources/convined.grc
     type: float
     unbuffered: 'False'
     vlen: '1'
@@ -166,7 +166,7 @@ blocks:
     affinity: ''
     alias: ''
     comment: ''
-    file: /home/abby/uni/tsmm/ibp_tsmm/resources/oh2b.wav
+    file: /home/abby/uni/tsmm/ibp_tsmm/resources/convined.wav
     maxoutbuf: '0'
     minoutbuf: '0'
     nchan: '1'

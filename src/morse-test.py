@@ -10,6 +10,7 @@ morse_code = {
     '+': '.-.-.', '-': '-....-', '_': '..--.-', '"': '.-..-.', '$': '...-..-', '@': '.--.-.'
 }
 
+
 stations = ("4U1UN", "VE8AT", "W6WX", "KH6RS", "ZL6B", "VK6RBP", "JA2IGY", "RR9O", "VR2B", "4S7B", "ZS6DN", "5Z4B", "4X6TU",
             "OH2B", "CS3B", "LU4AA", "OA4B", "YV5B")
 
@@ -23,9 +24,9 @@ for station in stations:
     in_morse = in_morse[:-1] # quitas la S final
 
     in_bits = ''.join([morse2bits[simbol] for simbol in in_morse])
-    stations_bits[station] = in_bits
+    stations_bits[station] = [i for i in map(int, list(in_bits))]
 
-#print(stations_bits)
+print(stations_bits)
 
 ### Estadística
 count_ones = sum([station_bits.count('1') for station_bits in stations_bits.values()])
