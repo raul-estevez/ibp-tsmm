@@ -37,12 +37,12 @@ class Decoder:
         # Aquí no hace falta guardar estado, ya que cada llamada es totaltmente independiente de la anterior, no hay memoria
         pass 
 
-    def decoder(self, pipe) -> None:
+    def decoder(self, pipe_in, pipe_out) -> None:
         while True:
-            data = pipe.recv()
+            data = pipe_in.recv()
             # Lo saltamos si es muy corto i.e. < min(len(stations)) o si es muy largo 100 (arbitrario, pero mayor que la estación más
             # larga)
-            if len(data) < 26 or len(data) > 100: pipe.send(())
+            if len(data) < 26 or len(data) > 100: pipe_out.send(())
             else:
                 min_dist = 10000
                 station = None
@@ -63,5 +63,5 @@ class Decoder:
                         hamming_dist = sum(map(lambda x: x[0] ^ x[1], zip(y,x[i:i+len(y)]))) + max_i 
                         if hamming_dist < min_dist: min_dist = hamming_dist; station = callsign
                 # Enviamos lo que tenemos por la pipe al proceso principal
-                pipe.send((station, min_dist))
+                pipe_out.send((station, min_dist))
 

@@ -74,11 +74,11 @@ class Demodulator:
         self.be_state = False
 
     #def demodulator(data: np.ndarray, be_state: bool, trails, be_trails) -> tuple:
-    def demodulator(self, pipe):
+    def demodulator(self, pipe_in, pipe_out):
         decisions = []
         while True:
             # Bloquea hasta que le llega algo
-            data = pipe.recv()
+            data = pipe_in.recv()
 
             if not self.be_state:
                 # guardamos el contexto para el demod por si cambiamos de estado
@@ -130,7 +130,7 @@ class Demodulator:
                     #print("Fin de mensaje")
                     #station, error = dc.find_station(list(bit_buffer))
                     #if station:print(str(list(bit_buffer))); print(station + " with " + str(error) + " bits of error")
-                    pipe.send(self.bit_buffer)
+                    pipe_out.send(list(self.bit_buffer))
                     self.bit_buffer.clear()
 
                     # Aquí no llamamos otra vez al be_detecor para ver si hay trigger por que queremos que la decisión de para el mensaje

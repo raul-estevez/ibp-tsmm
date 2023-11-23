@@ -1,0 +1,2 @@
+Estación recibida: CS3B con 7 bits de error
+Estación recibida: 4U1UN con 8 bits de error
