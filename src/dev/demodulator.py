@@ -74,7 +74,7 @@ class Demodulator:
         self.be_state = False
 
     #def demodulator(data: np.ndarray, be_state: bool, trails, be_trails) -> tuple:
-    def demodulator(self, pipe_in, pipe_out):
+    def demodulator(self, pipe_in, p("Estación recibida: " + str(station[0]) + " con " + str(station[1]) + " bits de error")ipe_out):
         decisions = []
         while True:
             # Bloquea hasta que le llega algo

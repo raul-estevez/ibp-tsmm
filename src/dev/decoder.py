@@ -59,9 +59,8 @@ class Decoder:
                     for i in range(max_i):
                         # El error es la distancia hamming del vector que recibimos al vector de la estación más el número de
                         # elementos que sobran/faltan entre ellos
-                        # TODO: es esto lo mejor?
+                            # TODO: es esto lo mejor?
                         hamming_dist = sum(map(lambda x: x[0] ^ x[1], zip(y,x[i:i+len(y)]))) + max_i 
                         if hamming_dist < min_dist: min_dist = hamming_dist; station = callsign
                 # Enviamos lo que tenemos por la pipe al proceso principal
                 pipe_out.send((station, min_dist))
-
