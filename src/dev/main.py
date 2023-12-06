@@ -6,6 +6,8 @@ from multiprocessing import Process, Pipe
 from demodulator import Demodulator, params_
 from decoder import Decoder
 
+import time
+
 params = params_()
 
 # Necesario para simular la llegada de datos en tiempo real
@@ -21,12 +23,11 @@ envelope = np.reshape(envelope, (int(len(envelope)/buffer_len), buffer_len))
 
 
 ############# PIPES ############# 
-bb_pipe_0, bb_pipe_1 = Pipe()
-demod_pipe_0, demod_pipe_1 = Pipe()
-decod_pipe_0, decod_pipe_1 = Pipe()
+bb_pipe_1, bb_pipe_0 = Pipe(False)
+demod_pipe_1, demod_pipe_0 = Pipe(False)
+decod_pipe_1, decod_pipe_0 = Pipe(False)
 
 ############# BASEBAND SETUP ############# 
-
 
 
 ############# DEMODULATOR SETUP ############# 
@@ -42,6 +43,8 @@ decod_p.start()
 
 # decod_pipe_1 is the pipe end that the main reads
 
+tic = time.perf_counter()
+
 for _,data in enumerate(envelope):
     bb_pipe_0.send(data)
     if decod_pipe_1.poll():
@@ -49,3 +52,10 @@ for _,data in enumerate(envelope):
         if len(station):
             print("Estación recibida: " + str(station[0]) + " con " + str(station[1]) + " bits de error")
 
+
+toc = time.perf_counter()
+print(toc-tic)
+
+
+demod_p.kill()
+decod_p.kill()
