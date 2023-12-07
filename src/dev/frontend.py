@@ -4,6 +4,7 @@ from scipy.signal import firwin
 import numpy as np
 from demodulator import Demodulator, params_
 from dataclasses import dataclass
+from collections import deque
 
 args = dict(driver="sdrplay")
 sdr = SoapySDR.Device(args)
@@ -42,26 +43,47 @@ class trails_:
     yq2 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
 
 trails = trails_()
-while True:
-    data = sdr.readStream(rxStream, [buff], len(buff))
+data_anali = deque()
+past = deque()
 
-    data_I = np.real(buff)
-    data_Q = np.imag(buff)
-    # Band pass filter centered in 5KHz
-    # In-phase part
-    [yi1, trails.yi1] = demod.convolve_rt(data_I, h_bp_5k_I, trails.yi1)
-    [yi2, trails.yi2] = demod.convolve_rt(data_Q, h_bp_5k_Q, trails.yi2)
-    # Quadrature part
-    [yq1, trails.yq1] = demod.convolve_rt(data_I, h_bp_5k_Q, trails.yq1)
-    [yq2, trails.yq2] = demod.convolve_rt(data_Q, h_bp_5k_I, trails.yq2)
+class frontend:
 
-    # In-phase and quadrature parts of the input filteres signal
-    yi = yi1 - yi2
-    yq = yq1 + yq2
+    def frontend(self, pipe_out):
+        while True:
+            data = sdr.readStream(rxStream, [buff], len(buff))
 
-    # Decimate to 25Khz
+            data_I = np.real(data)
+            data_Q = np.imag(data)
 
-    # Send though pipe 
+            # Band pass filter centered in 5KHz
+            # In-phase part
+            [yi1, trails.yi1] = demod.convolve_rt(data_I, h_bp_5k_I, trails.yi1)
+            [yi2, trails.yi2] = demod.convolve_rt(data_Q, h_bp_5k_Q, trails.yi2)
+            # Quadrature part
+            [yq1, trails.yq1] = demod.convolve_rt(data_I, h_bp_5k_Q, trails.yq1)
+            [yq2, trails.yq2] = demod.convolve_rt(data_Q, h_bp_5k_I, trails.yq2)
 
+            # In-phase and quadrature parts of the input filteres signal
+            yi = yi1 - yi2
+            yq = yq1 + yq2
+            y = yi + 1j*yq
+
+            # Decimate to 25Khz
+            y = np.abs(y) # envelope of the signal y
+            y = y[:: 250e3/25e3] # sample_rate/desired_rate
+
+            # Save data in a deque of 6k samples
+            if len(past)>0: # In case there are past samples to save in the data_anali
+                for i in past:
+                    data_anali.append(i)
+                past.clear() # Empty de past samples after saving them
+
+            for i in y:
+                if(len(data_anali)<=6000):
+                    data_anali.append(i) # apend samples from y one by one
+                else:
+                    past.append(i) # For not overloading data_anali
+            # Send though pipe 
+            pipe_out.send(data_anali)
 sdr.closeStream(rxStream) # shutdown stream
 sdr.deactivateStream(rxStream) #stop streaming
