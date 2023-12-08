@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from collections import deque
 import math
 
+# Read the filter coeficients
+h_bp_5k_I = np.loadtxt("bp_5k_real.fcf")
+h_bp_5k_Q = np.loadtxt("bp_5k_imag.fcf")
+
 @dataclass
 class trails_:
     yi1 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
@@ -16,6 +20,7 @@ class trails_:
     out_buf= np.zeros([])
     dfi = 0 # Decimation First Index
     out_buffer = np.zeros([])
+    overflow = False
 
 @dataclass
 class params_:
@@ -29,7 +34,7 @@ class params_:
 trails = trails_()
 params = params_()
 
-decimation_factor = int(math.florr(params.fs/params.f_decoder))
+decimation_factor = int(math.floor(params.fs/params.f_decoder))
 
 args = dict(driver="sdrplay")
 sdr = SoapySDR.Device(args)
@@ -53,10 +58,6 @@ sdr.activateStream(rxStream) #start streaming
 
 # Create a re-usable buffer for rx samples
 buff = np.array([0]*params.in_buffer_len, np.complex64)
-
-# Read the filter coeficients
-h_bp_5k_I = np.loadtxt("bp_5k_real.fcf")
-h_bp_5k_Q = np.loadtxt("bp_5k_imag.fcf")
 
 demod = Demodulator()
 
@@ -83,7 +84,7 @@ while True:
 
     # Decimate to 25Khz
     y = y[trails.dfi::decimation_factor]
-    trails.dft = (trails.dft + 1) % 8  
+    trails.dft = (trails.dfi + 1) % 8  
     # The 8 comes from: ((in_buffer_len / decimation_factor) % 1) * decimation_factor = ((2048 / 10) % 1) * 10 = 0.8 * 10 = 8
 
     # Envelope
@@ -94,7 +95,16 @@ while True:
         # Buffer overflow, save it
         out_buffer.extend(y[:-overflow])
         trails.out_buffer = y[-overflow:]
+        # TODO: Send to demodulator and process 
+
+        out_buffer.clear()
+        trails.overflow = True
+
     else:
+        if trails.overflow:
+            out_buffer.extend(trails.out_buffer)
+            trails.overflow = False
+
         out_buffer.extend(y)
 
 sdr.closeStream(rxStream) # shutdown stream
