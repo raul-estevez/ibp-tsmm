@@ -17,29 +17,25 @@ class params_:
     in_buffer_len = 2048
     out_buffer_len = 6000
 
+@dataclass
+class trails_:
+    yi1 = np.zeros([])
+    yi2 = np.zeros([])
+    yq1 = np.zeros([])
+    yq2 = np.zeros([])
+    out_buf= np.zeros([])
+    dfi = 0 # Decimation First Index
+    out_buffer = np.zeros([])
+    overflow = False
 
 class Frontend:
 
     def __init__(self):
         # Read the filter coeficients
-        h_bp_5k_I = np.loadtxt("bp_5k_real.fcf")
-        h_bp_5k_Q = np.loadtxt("bp_5k_imag.fcf")
+        self.h_bp_5k_I = np.loadtxt("bp_5k_real.fcf")
+        self.h_bp_5k_Q = np.loadtxt("bp_5k_imag.fcf")
 
-        @dataclass
-        class trails_:
-            yi1 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
-            yi2 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
-            yq1 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
-            yq2 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
-            out_buf= np.zeros([])
-            dfi = 0 # Decimation First Index
-            out_buffer = np.zeros([])
-            overflow = False
-
-        self.trails = trails_()
-        self.params = params_()
-
-        self.decimation_factor = int(math.floor(self.params.fs / self.params.f_decoder))
+        params = params_()
 
         #################### SDR CONFIG ####################
         args = dict(driver="sdrplay")
@@ -54,15 +50,25 @@ class Frontend:
         self.sdr.writeSetting("rfnotch_ctrl", True)  # Enable rf notch filer
         self.sdr.writeSetting("dabnotch_ctrl", True) # Enable dab notch filter
 
-        self.sdr.setBandwidth(SOAPY_SDR_RX, 0, self.params.bw) # IF bandwidth (compatible with zero IF and low IF, can't configure which?)
-        self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.params.fs) # Sampling frequency
-        self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.params.f0) # 14.1 MHz is 5kHz above
+        self.sdr.setBandwidth(SOAPY_SDR_RX, 0, params.bw) # IF bandwidth (compatible with zero IF and low IF, can't configure which?)
+        self.sdr.setSampleRate(SOAPY_SDR_RX, 0, params.fs) # Sampling frequency
+        self.sdr.setFrequency(SOAPY_SDR_RX, 0, params.f0) # 14.1 MHz is 5kHz above
 
         # Setup a stream (complex floats)
-        selfrxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
+        self.rxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
 
     def frontend(self, pipe_out) -> None:
-        self.sdr.activateStream(rxStream) #start streaming
+        params = params_()
+        trails = trails_()
+
+        trails.yi1 = np.zeros(int((self.h_bp_5k_I.size - 1) / 2)) 
+        trails.yi2 = np.zeros(int((self.h_bp_5k_I.size - 1) / 2))
+        trails.yq1 = np.zeros(int((self.h_bp_5k_I.size - 1) / 2))
+        trails.yq2 = np.zeros(int((self.h_bp_5k_I.size - 1) / 2))
+
+        decimation_factor = int(math.floor(params.fs / params.f_decoder))
+
+        self.sdr.activateStream(self.rxStream) #start streaming
 
         # Create a re-usable buffer for rx samples
         buff = np.array([0]*params.in_buffer_len, np.complex64)
@@ -70,18 +76,18 @@ class Frontend:
         out_buffer = deque(maxlen=6000) # Warning: overflows silently
 
         while True:
-            sr = sdr.readStream(rxStream, [buff], len(buff))
+            sr = self.sdr.readStream(self.rxStream, [buff], len(buff))
 
             data_I = np.real(buff) 
             data_Q = np.imag(buff)
 
             # Band pass filter centered in 5KHz
             # In-phase part
-            [yi1, trails.yi1] = Demodulator.convolve_rt(data_I, h_bp_5k_I, trails.yi1)
-            [yi2, trails.yi2] = Demodulator.convolve_rt(data_Q, h_bp_5k_Q, trails.yi2)
+            [yi1, trails.yi1] = Demodulator.convolve_rt(data_I, self.h_bp_5k_I, trails.yi1)
+            [yi2, trails.yi2] = Demodulator.convolve_rt(data_Q, self.h_bp_5k_Q, trails.yi2)
             # Quadrature part
-            [yq1, trails.yq1] = Demodulator.convolve_rt(data_I, h_bp_5k_Q, trails.yq1)
-            [yq2, trails.yq2] = Demodulator.convolve_rt(data_Q, h_bp_5k_I, trails.yq2)
+            [yq1, trails.yq1] = Demodulator.convolve_rt(data_I, self.h_bp_5k_Q, trails.yq1)
+            [yq2, trails.yq2] = Demodulator.convolve_rt(data_Q, self.h_bp_5k_I, trails.yq2)
 
             # In-phase and quadrature parts of the input filtered signal
             yi = yi1 - yi2
@@ -102,6 +108,7 @@ class Frontend:
                 out_buffer.extend(y[:-overflow])
                 trails.out_buffer = y[-overflow:]
 
+                print("Flush frontend buffer", flush=True)
                 # Send to demodulator
                 pipe_out.send(np.array(out_buffer))
 
