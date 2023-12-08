@@ -15,6 +15,7 @@ class trails_:
     yq2 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
     out_buf= np.zeros([])
     dfi = 0 # Decimation First Index
+    out_buffer = np.zeros([])
 
 @dataclass
 class params_:
@@ -59,7 +60,7 @@ h_bp_5k_Q = np.loadtxt("bp_5k_imag.fcf")
 
 demod = Demodulator()
 
-out_buff = deque(maxlen=6000) # Warning: overflows silently
+out_buffer = deque(maxlen=6000) # Warning: overflows silently
 
 while True:
     sr = sdr.readStream(rxStream, [buff], len(buff))
@@ -85,25 +86,16 @@ while True:
     trails.dft = (trails.dft + 1) % 8  
     # The 8 comes from: ((in_buffer_len / decimation_factor) % 1) * decimation_factor = ((2048 / 10) % 1) * 10 = 0.8 * 10 = 8
 
-    y = np.abs(y) # envelope of the signal y
+    # Envelope
+    y = np.abs(y)
 
-
-
-    ### Te puedes ahorrar los for con iteradores, mira la documentación de la deque, más elegante (y posiblemente más rápido)
-    
-    # Save data in a deque of 6k samples
-    if len(past)>0: # In case there are past samples to save in the data_anali
-        for i in past:
-            data_anali.append(i)
-        past.clear() # Empty de past samples after saving them
-
-    for i in y:
-        if(len(data_anali)<=6000):
-            data_anali.append(i) # apend samples from y one by one
-        else:
-            past.append(i) # For not overloading data_anali
-
-
+    # len(y) = floor(in_buffer_len / decimation_factor) = floor(2048 / 10) = 204
+    if (overflow := (len(out_buffer)+204) - params.out_buffer_len) > 0:
+        # Buffer overflow, save it
+        out_buffer.extend(y[:-overflow])
+        trails.out_buffer = y[-overflow:]
+    else:
+        out_buffer.extend(y)
 
 sdr.closeStream(rxStream) # shutdown stream
 sdr.deactivateStream(rxStream) #stop streaming
