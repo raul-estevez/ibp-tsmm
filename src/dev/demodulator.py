@@ -138,7 +138,8 @@ class Demodulator:
                     # buffer) y se pare el mensaje. Esto ayuda a rechazar falsos triggers
 
 
-    def convolve_rt(self, x1, x2, trail):
+    @staticmethod
+    def convolve_rt(x1, x2, trail):
         # x1 & x2: datos a convolucionar, suponemos que len(x1)>len(x2)
         # trail: últimos len(x2)-1 datos de la convolución anterior, que se suman a los len(x2)-1 primeros de la nueva para simular 
         # una convolución continua

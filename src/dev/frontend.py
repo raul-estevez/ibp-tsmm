@@ -6,21 +6,7 @@ from demodulator import Demodulator, params_
 from dataclasses import dataclass
 from collections import deque
 import math
-
-# Read the filter coeficients
-h_bp_5k_I = np.loadtxt("bp_5k_real.fcf")
-h_bp_5k_Q = np.loadtxt("bp_5k_imag.fcf")
-
-@dataclass
-class trails_:
-    yi1 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
-    yi2 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
-    yq1 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
-    yq2 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
-    out_buf= np.zeros([])
-    dfi = 0 # Decimation First Index
-    out_buffer = np.zeros([])
-    overflow = False
+from multiprocessing import Pipe
 
 @dataclass
 class params_:
@@ -31,81 +17,105 @@ class params_:
     in_buffer_len = 2048
     out_buffer_len = 6000
 
-trails = trails_()
-params = params_()
 
-decimation_factor = int(math.floor(params.fs/params.f_decoder))
+class Frontend:
 
-args = dict(driver="sdrplay")
-sdr = SoapySDR.Device(args)
+    def __init__(self):
+        # Read the filter coeficients
+        h_bp_5k_I = np.loadtxt("bp_5k_real.fcf")
+        h_bp_5k_Q = np.loadtxt("bp_5k_imag.fcf")
 
-# Apply settings
-sdr.setAntenna(SOAPY_SDR_RX, 0, "Antenna C")
-sdr.setDCOffsetMode(SOAPY_SDR_RX, 0, True)  
-sdr.setGainMode(SOAPY_SDR_RX, 0, True) #AGC
-sdr.writeSetting("iqcorr_ctrl", True)   # I/Q Correction
-sdr.writeSetting("biasT_ctrl", False)   # Disable Bias-T
-sdr.writeSetting("rfnotch_ctrl", True)  # Enable rf notch filer
-sdr.writeSetting("dabnotch_ctrl", True) # Enable dab notch filter
+        @dataclass
+        class trails_:
+            yi1 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
+            yi2 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
+            yq1 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
+            yq2 = np.zeros(int((h_bp_5k_I.size - 1) / 2))
+            out_buf= np.zeros([])
+            dfi = 0 # Decimation First Index
+            out_buffer = np.zeros([])
+            overflow = False
 
-sdr.setBandwidth(SOAPY_SDR_RX, 0, params.bw) # IF bandwidth (compatible with zero IF and low IF, can't configure which?)
-sdr.setSampleRate(SOAPY_SDR_RX, 0, params.fs) # Sampling frequency
-sdr.setFrequency(SOAPY_SDR_RX, 0, params.f0) # 14.1 MHz is 5kHz above
+        self.trails = trails_()
+        self.params = params_()
 
-# Setup a stream (complex floats)
-rxStream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
-sdr.activateStream(rxStream) #start streaming
+        self.decimation_factor = int(math.floor(self.params.fs / self.params.f_decoder))
 
-# Create a re-usable buffer for rx samples
-buff = np.array([0]*params.in_buffer_len, np.complex64)
+        #################### SDR CONFIG ####################
+        args = dict(driver="sdrplay")
+        self.sdr = SoapySDR.Device(args)
 
-demod = Demodulator()
+        # Apply settings
+        self.sdr.setAntenna(SOAPY_SDR_RX, 0, "Antenna C")
+        self.sdr.setDCOffsetMode(SOAPY_SDR_RX, 0, True)  
+        self.sdr.setGainMode(SOAPY_SDR_RX, 0, True) #AGC
+        self.sdr.writeSetting("iqcorr_ctrl", True)   # I/Q Correction
+        self.sdr.writeSetting("biasT_ctrl", False)   # Disable Bias-T
+        self.sdr.writeSetting("rfnotch_ctrl", True)  # Enable rf notch filer
+        self.sdr.writeSetting("dabnotch_ctrl", True) # Enable dab notch filter
 
-out_buffer = deque(maxlen=6000) # Warning: overflows silently
+        self.sdr.setBandwidth(SOAPY_SDR_RX, 0, self.params.bw) # IF bandwidth (compatible with zero IF and low IF, can't configure which?)
+        self.sdr.setSampleRate(SOAPY_SDR_RX, 0, self.params.fs) # Sampling frequency
+        self.sdr.setFrequency(SOAPY_SDR_RX, 0, self.params.f0) # 14.1 MHz is 5kHz above
 
-while True:
-    sr = sdr.readStream(rxStream, [buff], len(buff))
+        # Setup a stream (complex floats)
+        selfrxStream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
 
-    data_I = np.real(buff) 
-    data_Q = np.imag(buff)
+    def frontend(self, pipe_out) -> None:
+        self.sdr.activateStream(rxStream) #start streaming
 
-    # Band pass filter centered in 5KHz
-    # In-phase part
-    [yi1, trails.yi1] = demod.convolve_rt(data_I, h_bp_5k_I, trails.yi1)
-    [yi2, trails.yi2] = demod.convolve_rt(data_Q, h_bp_5k_Q, trails.yi2)
-    # Quadrature part
-    [yq1, trails.yq1] = demod.convolve_rt(data_I, h_bp_5k_Q, trails.yq1)
-    [yq2, trails.yq2] = demod.convolve_rt(data_Q, h_bp_5k_I, trails.yq2)
+        # Create a re-usable buffer for rx samples
+        buff = np.array([0]*params.in_buffer_len, np.complex64)
 
-    # In-phase and quadrature parts of the input filtered signal
-    yi = yi1 - yi2
-    yq = yq1 + yq2
-    y = yi + 1j*yq
+        out_buffer = deque(maxlen=6000) # Warning: overflows silently
 
-    # Decimate to 25Khz
-    y = y[trails.dfi::decimation_factor]
-    trails.dft = (trails.dfi + 1) % 8  
-    # The 8 comes from: ((in_buffer_len / decimation_factor) % 1) * decimation_factor = ((2048 / 10) % 1) * 10 = 0.8 * 10 = 8
+        while True:
+            sr = sdr.readStream(rxStream, [buff], len(buff))
 
-    # Envelope
-    y = np.abs(y)
+            data_I = np.real(buff) 
+            data_Q = np.imag(buff)
 
-    # len(y) = floor(in_buffer_len / decimation_factor) = floor(2048 / 10) = 204
-    if (overflow := (len(out_buffer)+204) - params.out_buffer_len) > 0:
-        # Buffer overflow, save it
-        out_buffer.extend(y[:-overflow])
-        trails.out_buffer = y[-overflow:]
-        # TODO: Send to demodulator and process 
+            # Band pass filter centered in 5KHz
+            # In-phase part
+            [yi1, trails.yi1] = Demodulator.convolve_rt(data_I, h_bp_5k_I, trails.yi1)
+            [yi2, trails.yi2] = Demodulator.convolve_rt(data_Q, h_bp_5k_Q, trails.yi2)
+            # Quadrature part
+            [yq1, trails.yq1] = Demodulator.convolve_rt(data_I, h_bp_5k_Q, trails.yq1)
+            [yq2, trails.yq2] = Demodulator.convolve_rt(data_Q, h_bp_5k_I, trails.yq2)
 
-        out_buffer.clear()
-        trails.overflow = True
+            # In-phase and quadrature parts of the input filtered signal
+            yi = yi1 - yi2
+            yq = yq1 + yq2
+            y = yi + 1j*yq
 
-    else:
-        if trails.overflow:
-            out_buffer.extend(trails.out_buffer)
-            trails.overflow = False
+            # Decimate to 25Khz
+            y = y[trails.dfi::decimation_factor]
+            trails.dft = (trails.dfi + 1) % 8  
+            # The 8 comes from: ((in_buffer_len / decimation_factor) % 1) * decimation_factor = ((2048 / 10) % 1) * 10 = 0.8 * 10 = 8
 
-        out_buffer.extend(y)
+            # Envelope
+            y = np.abs(y)
 
-sdr.closeStream(rxStream) # shutdown stream
-sdr.deactivateStream(rxStream) #stop streaming
+            # len(y) = floor(in_buffer_len / decimation_factor) = floor(2048 / 10) = 204
+            if (overflow := (len(out_buffer)+204) - params.out_buffer_len) >= 0:
+                # Buffer overflow, save it
+                out_buffer.extend(y[:-overflow])
+                trails.out_buffer = y[-overflow:]
+
+                # Send to demodulator
+                pipe_out.send(np.array(out_buffer))
+
+                # Clear out_buffer and set overflow flag
+                out_buffer.clear()
+                trails.overflow = True
+            else:
+                # If we got an overflow (or just sent data)
+                if trails.overflow:
+                    out_buffer.extend(trails.out_buffer)
+                    trails.overflow = False
+
+                # Fill out_buffer
+                out_buffer.extend(y)
+
+        sdr.closeStream(rxStream) # shutdown stream
+        sdr.deactivateStream(rxStream) #stop streaming

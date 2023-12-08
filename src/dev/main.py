@@ -5,6 +5,7 @@ from multiprocessing import Process, Pipe
 
 from demodulator import Demodulator, params_
 from decoder import Decoder
+from frontend import Frontend
 
 import time
 
@@ -27,8 +28,9 @@ bb_pipe_1, bb_pipe_0 = Pipe(False)
 demod_pipe_1, demod_pipe_0 = Pipe(False)
 decod_pipe_1, decod_pipe_0 = Pipe(False)
 
-############# BASEBAND SETUP ############# 
-
+############# FRONT-END SETUP ############# 
+frontend = Frontend()
+front_p = Process(target=frontend.frontend, args=(bb_pipe_0,))
 
 ############# DEMODULATOR SETUP ############# 
 demodulator = Demodulator()
@@ -43,19 +45,15 @@ decod_p.start()
 
 # decod_pipe_1 is the pipe end that the main reads
 
-tic = time.perf_counter()
 
-for _,data in enumerate(envelope):
-    bb_pipe_0.send(data)
+while True:
     if decod_pipe_1.poll():
         station = decod_pipe_1.recv()             # Bloqueamos hasta que responda
         if len(station):
             print("Estación recibida: " + str(station[0]) + " con " + str(station[1]) + " bits de error")
 
 
-toc = time.perf_counter()
-print(toc-tic)
-
 
 demod_p.kill()
 decod_p.kill()
+front_p.kill()

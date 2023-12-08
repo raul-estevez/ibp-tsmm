@@ -34,7 +34,7 @@ stations = {'4U1UN':  [1,0,1,0,1,0,1,0,1,1,1,0,0,0,1,0,1,0,1,1,1,0,0,0,1,0,1,1,1
 class Decoder:
 
     def __init__(self):
-        # Aquí no hace falta guardar estado, ya que cada llamada es totaltmente independiente de la anterior, no hay memoria
+        # Aquí no hace falta guardar estado, ya que cada llamada es totalmente independiente de la anterior, no hay memoria
         pass 
 
     def decoder(self, pipe_in, pipe_out) -> None:
