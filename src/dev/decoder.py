@@ -1,3 +1,13 @@
+""" 
+==============
+Decoder System
+==============
+
+Takes as input an array of bits and returns the station that best matches the array. The criterion used is the minimun Hamming
+distance between the stations and the shifted input array (like a running hamming distance of the array with every station)
+
+"""
+
 import sys 
 from multiprocessing import Pipe
 
